@@ -1,0 +1,12 @@
+# Python3 Venv Files
+.venv/
+bin/
+include/
+lib/
+lib64
+pyvenv.cfg
+share/
+venv/
+
+# Pycharm
+.idea/

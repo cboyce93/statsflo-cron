@@ -1,6 +1,7 @@
 import requests
 
 from obj.player import Player
+from obj.play import Play
 
 """
 Game ID
@@ -33,16 +34,64 @@ game_JSON = requests.get(game_api_url).json()
 
 # get JSON data for game shiftcharts
 shiftcharts_JSON = requests.get(shiftcharts_api_url).json()
+shifts = shiftcharts_JSON['data']
 
 # get all players in the game
 game_players = game_JSON["gameData"]["players"]
 
 # init list to store Player objs
-player_objs = []
+player_objs = {}
 
 # get dictionary containing player data and pass to Player constructor
-for playerID in game_players:
-    player_objs.append(Player(game_players[playerID]))
 
-for player in player_objs:
-    print(player.id)
+for player_args in game_players.items():
+    kwargs = player_args[1]
+    player_objs[kwargs['id']] = Player(kwargs)
+
+# get all plays from game
+all_plays = game_JSON["liveData"]["plays"]["allPlays"]
+
+for playargs in all_plays:
+
+    # create Play objs
+    play = Play(playargs)
+    eventID = play.result['eventTypeId'] # i.e., SHOT, BLOCKED SHOT etc.
+
+    # shootouts excluded from player on-ice calcs
+    if play.about['periodType'] != "SHOOTOUT":
+
+        # Fenwick - any unblocked shot attempt (goals, shots on net and misses) outside of the shootout.
+        # Corsi - Any shot attempt (goals, shots on net, misses and blocks) outside of the shootout.
+        # Shots - any shot attempt on net (goals and shots on net) outside of the shootout.
+
+        if "SHOT" in eventID or eventID == "GOAL":
+
+            # set players on ice for play
+            play.setPlayersOnIce(shifts)
+            # update Player Corsi stats
+            for playerID in play.players_on_ice:
+                player_objs[playerID].update_corsi(play)
+
+            # update Fenwick Corsi stats
+            # blocked shots excluded
+            if eventID != "BLOCKED_SHOT":
+                for playerID in play.players_on_ice:
+                    player_objs[playerID].update_fenwick(play)
+
+            if eventID != "BLOCKED_SHOT" and eventID != "MISSED_SHOT":
+                for playerID in play.players_on_ice:
+                    player_objs[playerID].update_shots(play)
+
+            if eventID == "GOAL":
+                for playerID in play.players_on_ice:
+                    player_objs[playerID].update_goals(play)
+
+
+
+
+for playerID, player in player_objs.items():
+    if player.all_CFP > 0:
+        print(player.fullName, player.all_CF, player.all_CA, round(player.all_CFP, 2),
+                               player.all_FF, player.all_FA, round(player.all_FFP,2),
+                               player.all_SF, player.all_SA, round(player.all_SFP,2))
+
